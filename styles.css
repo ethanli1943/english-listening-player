@@ -57,4 +57,14 @@ body {
   display: inline-block; padding: 10px 18px; border-radius: 999px; background: var(--accent);
   color: #1d2a36; font-weight: 700; text-decoration: none; cursor: grab;
 }
+.input {
+  width: 100%; font-size: 15px; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: 6px 0;
+}
+.input.short { width: 90px; margin: 0; }
+.field-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 10px; }
+.field-row .muted { margin: 0; font-size: 13px; }
+.preview { margin: 12px 0 4px; display: flex; flex-direction: column; gap: 2px; }
+.preview .warn { color: #b3471f; margin-top: 4px; }
+#t-result .button { margin-top: 4px; }
 .footnote { color: var(--muted); font-size: 13px; }
