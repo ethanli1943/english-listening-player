@@ -243,7 +243,7 @@
 .icon{background:rgba(255,255,255,.15);border:0;color:#fff;border-radius:8px;width:30px;height:30px;font-size:16px;cursor:pointer}
 .body{overflow:auto;padding:12px;display:flex;flex-direction:column;gap:12px}
 .collapsed .body{display:none}
-.now{background:#f1f6fb;border-radius:12px;padding:12px}
+.now{background:#f1f6fb;border-radius:12px;padding:12px;position:sticky;top:0;z-index:1;box-shadow:0 6px 10px -8px rgba(0,0,0,.3)}
 .now h3{margin:0;font-size:20px}
 .now p{margin:2px 0 8px;color:#4a5b6b}
 .remain{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
@@ -363,7 +363,6 @@ textarea{width:100%;min-height:110px;border:1px solid #c8d5e1;border-radius:8px;
       }
       list.append(row);
     });
-    list.querySelector('.cur')?.scrollIntoView({ block: 'nearest' });
   }
   function render() { renderNow(); renderList(); }
 
