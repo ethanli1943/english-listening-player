@@ -41,7 +41,7 @@
       const line = original.trim(); if (!line) continue;
       const range = line.match(/Track\s*0*(\d{1,3})(?:\s*[-–—~～至]\s*(?:Track\s*)?0*(\d{1,3}))?/i);
       const repeat = line.match(/(\d{1,2})\s*遍/);
-      if (!range || !repeat) { skipped.push(line); continue; }
+      if (!range || !repeat) { if (/track/i.test(line)) skipped.push(line); continue; }
       const first = +range[1], last = +(range[2] || range[1]), times = +repeat[1];
       if (first < 1 || last < first || last - first > 59 || times < 1 || times > 30) { skipped.push(line); continue; }
       const prefix = line.slice(0, range.index).replace(/聆聽\s*CD\s*[:：]?/gi, '').trim();
@@ -67,6 +67,13 @@
   function decodeQueue(value) {
     const bin = atob(value.replace(/-/g, '+').replace(/_/g, '/'));
     const data = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
+    if (data.v === 2 && Array.isArray(data.g)) {
+      const groups = data.g.map(([label, first, last, times]) => {
+        if (![first, last, times].every(Number.isInteger) || first < 1 || last < first || last - first > 59 || times < 1 || times > 30) throw Error('bad');
+        return { id: makeId(), label: String(label).slice(0, 80), first, last, times };
+      });
+      return expand(groups);
+    }
     if (data.v !== 1 || !Array.isArray(data.q) || data.q.length > 1500) throw Error('bad');
     const gid = (data.g || []).map(() => makeId());
     return data.q.map(([track, label, round, total, group]) => {
