@@ -22,6 +22,58 @@ const ua = navigator.userAgent;
 const guess = /iPhone|iPad|Macintosh.*Mobile/.test(ua) ? 'iphone' : /Android/.test(ua) ? 'android' : /Mobi/.test(ua) ? 'iphone' : 'pc';
 document.querySelector(`.tab[data-tab="${guess}"]`)?.click();
 
+// ---------- 老師產生作業連結（格式與 panel.js 的分享相同） ----------
+function parseHomework(text) {
+  const groups = [], skipped = [];
+  for (const original of text.split(/\r?\n/)) {
+    const line = original.trim(); if (!line) continue;
+    const range = line.match(/Track\s*0*(\d{1,3})(?:\s*[-–—~～至]\s*(?:Track\s*)?0*(\d{1,3}))?/i);
+    const repeat = line.match(/(\d{1,2})\s*遍/);
+    if (!range || !repeat) { skipped.push(line); continue; }
+    const first = +range[1], last = +(range[2] || range[1]), times = +repeat[1];
+    if (first < 1 || last < first || last - first > 59 || times < 1 || times > 30) { skipped.push(line); continue; }
+    const prefix = line.slice(0, range.index).replace(/聆聽\s*CD\s*[:：]?/gi, '').trim();
+    groups.push({ label: prefix || `第 ${groups.length + 1} 組`, first, last, times });
+  }
+  return { groups, skipped };
+}
+function encode(groups) {
+  const labels = [...new Set(groups.map(g => g.label))], q = [];
+  groups.forEach((g, gi) => {
+    for (let round = 1; round <= g.times; round++) for (let t = g.first; t <= g.last; t++) q.push([t, labels.indexOf(g.label), round, g.times, gi]);
+  });
+  const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, l: labels, g: groups.map((_, i) => String(i)), q }));
+  let bin = ''; for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+$('t-make').onclick = () => {
+  const { groups, skipped } = parseHomework($('t-hw').value);
+  const preview = $('t-preview'); preview.replaceChildren(); $('t-result').hidden = false;
+  if (!groups.length) {
+    preview.textContent = '沒有找到作業。每一行要有 Track 範圍和「幾遍」，例如：Track11-13 5遍';
+    $('t-link').hidden = $('t-copy').hidden = true; return;
+  }
+  const field = /^[A-Za-z0-9]{1,10}$/.test($('t-field').value.trim()) ? $('t-field').value.trim() : 'CA3';
+  for (const g of groups) {
+    const line = document.createElement('div');
+    line.textContent = `✓ ${g.label}：Track ${g.first}${g.last > g.first ? `–${g.last}` : ''}，${g.times} 遍`;
+    preview.append(line);
+  }
+  if (skipped.length) {
+    const warn = document.createElement('div'); warn.className = 'warn';
+    warn.textContent = `⚠ 有 ${skipped.length} 行看不懂，沒有放進連結：${skipped.join('／')}`;
+    preview.append(warn);
+  }
+  $('t-link').hidden = $('t-copy').hidden = false;
+  $('t-link').value = `${BASE}#p=${encode(groups)}&f=${field}`;
+};
+$('t-copy').onclick = async () => {
+  try { await navigator.clipboard.writeText($('t-link').value); }
+  catch { $('t-link').select(); document.execCommand('copy'); }
+  $('t-copy').textContent = '✅ 已複製，可以貼到 LINE';
+  setTimeout(() => { $('t-copy').textContent = '📋 複製連結'; }, 2500);
+};
+
 // 收到分享連結：#p=<清單>&f=<冊別>
 const params = new URLSearchParams(location.hash.slice(1));
 const data = params.get('p'), field = params.get('f');

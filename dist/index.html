@@ -73,6 +73,19 @@
       </ol>
     </section>
 
+    <section class="card" id="teacher">
+      <h2>👩‍🏫 老師／家長：產生本週作業連結</h2>
+      <p class="muted">貼上作業文字，產生一條連結貼到班群。家長點開後，作業會自動帶入，不用自己輸入。</p>
+      <textarea id="t-hw" class="input" rows="7" placeholder="把本週作業整段貼上，例如：&#10;(二) 聆聽CD：Track11-13（配合課本p.18-21）5遍&#10;(三) 聆聽CD：Track14-16（配合課本p.22-24）5遍"></textarea>
+      <label class="field-row">冊別代碼 <input id="t-field" class="input short" value="CA3" maxlength="10" aria-label="冊別代碼"><span class="muted">康軒網址裡 field= 後面的字，Cool ABC 3 是 CA3</span></label>
+      <button id="t-make" class="button primary" type="button">產生連結</button>
+      <div id="t-result" hidden>
+        <div id="t-preview" class="preview"></div>
+        <textarea id="t-link" class="input" rows="3" readonly aria-label="作業連結"></textarea>
+        <button id="t-copy" class="button primary" type="button">📋 複製連結</button>
+      </div>
+    </section>
+
     <p class="footnote">本工具不下載、不儲存、不轉傳任何康軒音檔；所有聲音都由康軒官方頁面播放。手機關掉螢幕時，部分瀏覽器可能會在一首結束後停住，回到畫面按「播放」即可接續。</p>
   </main>
 </body>
