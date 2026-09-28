@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123e62">
+  <meta name="description" content="貼上英文聽力作業，依序播放每組曲目，手動調整清單並分享作業安排。">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23123e62'/%3E%3Cpath d='M21 26h8l10-9v30l-10-9h-8z' fill='%23fff'/%3E%3Cpath d='M44 23a16 16 0 010 18' fill='none' stroke='%23f8be58' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
+  <title>英文聽力作業播放器</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-icon">▶</span><span>英文聽力作業播放器</span></div>
+    <span class="top-note">一遍播完整組，再開始下一遍</span>
+  </header>
+  <main class="shell">
+    <div class="intro">
+      <div><p class="eyebrow">HOMEWORK PLAYER</p><h1>貼上作業，照順序聽完。</h1><p>在手機、平板或電腦建立播放清單；下一週換上新作業也能繼續用。</p></div>
+      <button id="share" class="button pale" type="button">分享這份清單</button>
+    </div>
+    <div class="notice" role="note"><strong>音檔留在自己的裝置。</strong> 分享連結只包含曲目順序和遍數，不包含音檔。每台裝置要自行選取有權使用的音檔，才能播放。<a href="https://listeningdata.knsh.com.tw/cd_online/V1/index.html?field=CA3" target="_blank" rel="noopener noreferrer">開啟康軒官方聆聽頁 ↗</a></div>
+    <div class="main-grid">
+      <div class="left-column">
+        <section class="card now-card" aria-labelledby="now-title">
+          <div class="section-heading"><div><span class="eyebrow">正在播放</span><h2 id="now-title">準備開始</h2></div><span id="play-state" class="badge">尚未播放</span></div>
+          <p id="now-detail" class="now-detail">先建立清單，再選擇音檔。</p>
+          <div class="time-card"><span>整份清單剩餘時間</span><strong id="remaining">--:--</strong><small id="remaining-note">加入音檔後會顯示時間</small></div>
+          <audio id="audio" preload="metadata" playsinline></audio>
+          <div class="seek-row"><span id="elapsed">0:00</span><input id="seek" type="range" min="0" max="1000" value="0" disabled aria-label="拖曳目前音檔進度"><span id="duration">0:00</span></div>
+          <div class="transport"><button id="previous" type="button" class="button icon" aria-label="上一首">⏮</button><button id="play" type="button" class="button primary">開始播放</button><button id="next" type="button" class="button icon" aria-label="下一首">⏭</button><button id="next-round" type="button" class="button secondary">下一遍</button></div>
+          <div class="progress-line"><div id="progress-fill"></div></div><p id="queue-progress" class="muted small">清單尚未建立</p>
+        </section>
+        <section class="card" aria-labelledby="homework-title">
+          <div class="section-heading"><div><span class="eyebrow">每週作業</span><h2 id="homework-title">貼上老師的作業</h2></div></div>
+          <p class="muted">每行有 Track 範圍和遍數即可。建立後仍可在右側手動修改。</p>
+          <textarea id="homework" rows="6" placeholder="例如：(二) 聆聽CD：Track11-13（配合課本p.18-21）5遍"></textarea>
+          <div class="inline-actions"><button id="parse" type="button" class="button secondary">預覽作業</button><button id="example" type="button" class="text-button">填入範例</button></div>
+          <div id="preview" class="preview" hidden></div>
+          <button id="apply" type="button" class="button primary" hidden>使用這份清單</button>
+        </section>
+        <section class="card" aria-labelledby="files-title">
+          <div class="section-heading"><div><span class="eyebrow">音檔來源</span><h2 id="files-title">選擇自己可使用的音檔</h2></div></div>
+          <p class="muted">可一次選取多個 MP3、M4A 或 WAV。檔名包含 Track11 或 011 等曲目編號時，會自動配對。音檔只保存在這台裝置的瀏覽器。</p>
+          <label class="file-button">選取音檔<input id="files" type="file" accept="audio/*,.mp3,.m4a,.wav" multiple></label>
+          <div id="media-list" class="media-list"></div>
+        </section>
+      </div>
+      <aside class="card playlist-card" aria-labelledby="playlist-title">
+        <div class="section-heading"><div><span class="eyebrow">可自由編輯</span><h2 id="playlist-title">播放清單</h2></div><span id="item-count" class="count">0 首</span></div>
+        <p class="muted small">點曲目可跳到該首；「＋」會加在該首後面。編輯其他曲目時，目前播放不會中斷。</p>
+        <div id="playlist" class="playlist"></div>
+        <div class="manual-add"><label for="manual-track">手動新增曲目</label><div class="manual-row"><input id="manual-track" type="number" min="1" max="999" placeholder="Track 編號"><button id="manual-add" type="button" class="button secondary">加入最後</button></div></div>
+      </aside>
+    </div>
+    <p class="footnote">播放進度與清單只存在目前瀏覽器。分享連結會帶清單到另一台裝置，但不會同步音檔或已聽進度。手機瀏覽器可能要求按一次「開始播放」才能繼續自動播放。</p>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
