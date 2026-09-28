@@ -29,7 +29,7 @@ function parseHomework(text) {
     const line = original.trim(); if (!line) continue;
     const range = line.match(/Track\s*0*(\d{1,3})(?:\s*[-–—~～至]\s*(?:Track\s*)?0*(\d{1,3}))?/i);
     const repeat = line.match(/(\d{1,2})\s*遍/);
-    if (!range || !repeat) { skipped.push(line); continue; }
+    if (!range || !repeat) { if (/track/i.test(line)) skipped.push(line); continue; }
     const first = +range[1], last = +(range[2] || range[1]), times = +repeat[1];
     if (first < 1 || last < first || last - first > 59 || times < 1 || times > 30) { skipped.push(line); continue; }
     const prefix = line.slice(0, range.index).replace(/聆聽\s*CD\s*[:：]?/gi, '').trim();
@@ -37,12 +37,9 @@ function parseHomework(text) {
   }
   return { groups, skipped };
 }
+// v2 短格式：只記每組「標籤、起訖 Track、遍數」
 function encode(groups) {
-  const labels = [...new Set(groups.map(g => g.label))], q = [];
-  groups.forEach((g, gi) => {
-    for (let round = 1; round <= g.times; round++) for (let t = g.first; t <= g.last; t++) q.push([t, labels.indexOf(g.label), round, g.times, gi]);
-  });
-  const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, l: labels, g: groups.map((_, i) => String(i)), q }));
+  const bytes = new TextEncoder().encode(JSON.stringify({ v: 2, g: groups.map(g => [g.label, g.first, g.last, g.times]) }));
   let bin = ''; for (const b of bytes) bin += String.fromCharCode(b);
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
@@ -82,17 +79,23 @@ if (data && /^[A-Za-z0-9_-]+$/.test(data)) {
   try {
     const bin = atob(data.replace(/-/g, '+').replace(/_/g, '/'));
     const parsed = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
-    const groups = new Map();
-    for (const [track, label, round, total, group] of parsed.q) {
-      const key = `${group}`;
-      if (!groups.has(key)) groups.set(key, { label: parsed.l[label], tracks: new Set(), total });
-      groups.get(key).tracks.add(track);
+    let lines, count;
+    if (parsed.v === 2) {
+      lines = parsed.g.map(([label, first, last, times]) => `${label}：Track ${first}${last > first ? `–${last}` : ''}，${times} 遍`);
+      count = parsed.g.reduce((n, [, first, last, times]) => n + (last - first + 1) * times, 0);
+    } else {
+      const groups = new Map();
+      for (const [track, label, , total, group] of parsed.q) {
+        if (!groups.has(group)) groups.set(group, { label: parsed.l[label], tracks: new Set(), total });
+        groups.get(group).tracks.add(track);
+      }
+      lines = [...groups.values()].map(g => {
+        const t = [...g.tracks].sort((a, b) => a - b);
+        return `${g.label}：Track ${t[0]}${t.length > 1 ? `–${t[t.length - 1]}` : ''}，${g.total} 遍`;
+      });
+      count = parsed.q.length;
     }
-    const lines = [...groups.values()].map(g => {
-      const t = [...g.tracks].sort((a, b) => a - b);
-      return `${g.label}：Track ${t[0]}${t.length > 1 ? `–${t[t.length - 1]}` : ''}，${g.total} 遍`;
-    });
-    $('shared-summary').textContent = `共 ${parsed.q.length} 首。` + lines.join('；');
+    $('shared-summary').textContent = `共 ${count} 首。` + lines.join('；');
     $('shared').hidden = false;
     $('open').href = `https://listeningdata.knsh.com.tw/cd_online/V1/index.html?field=${safeField}#elp=${data}`;
     $('open').textContent = `▶ 開啟康軒並帶入這份作業`;
