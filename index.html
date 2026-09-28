@@ -4,59 +4,76 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#123e62">
-  <meta name="description" content="貼上英文聽力作業，依序播放每組曲目，手動調整清單並分享作業安排。">
+  <meta name="description" content="在康軒 CD 線上聽頁面加上作業播放面板：整組播完算一遍、自動接下一首、剩餘時間與播放清單。">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23123e62'/%3E%3Cpath d='M21 26h8l10-9v30l-10-9h-8z' fill='%23fff'/%3E%3Cpath d='M44 23a16 16 0 010 18' fill='none' stroke='%23f8be58' stroke-width='5' stroke-linecap='round'/%3E%3C/svg%3E">
-  <title>英文聽力作業播放器</title>
+  <title>英聽小幫手</title>
   <link rel="stylesheet" href="./styles.css">
-  <script src="./app.js" defer></script>
+  <script src="./landing.js" defer></script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand"><span class="brand-icon">▶</span><span>英文聽力作業播放器</span></div>
-    <span class="top-note">一遍播完整組，再開始下一遍</span>
-  </header>
+  <header class="topbar"><span class="brand-icon">🎧</span><span>英聽小幫手</span></header>
   <main class="shell">
-    <div class="intro">
-      <div><p class="eyebrow">HOMEWORK PLAYER</p><h1>貼上作業，照順序聽完。</h1><p>在手機、平板或電腦建立播放清單；下一週換上新作業也能繼續用。</p></div>
-      <button id="share" class="button pale" type="button">分享這份清單</button>
-    </div>
-    <div class="notice" role="note"><strong>音檔留在自己的裝置。</strong> 分享連結只包含曲目順序和遍數，不包含音檔。每台裝置要自行選取有權使用的音檔，才能播放。<a href="https://listeningdata.knsh.com.tw/cd_online/V1/index.html?field=CA3" target="_blank" rel="noopener noreferrer">開啟康軒官方聆聽頁 ↗</a></div>
-    <div class="main-grid">
-      <div class="left-column">
-        <section class="card now-card" aria-labelledby="now-title">
-          <div class="section-heading"><div><span class="eyebrow">正在播放</span><h2 id="now-title">準備開始</h2></div><span id="play-state" class="badge">尚未播放</span></div>
-          <p id="now-detail" class="now-detail">先建立清單，再選擇音檔。</p>
-          <div class="time-card"><span>整份清單剩餘時間</span><strong id="remaining">--:--</strong><small id="remaining-note">加入音檔後會顯示時間</small></div>
-          <audio id="audio" preload="metadata" playsinline></audio>
-          <div class="seek-row"><span id="elapsed">0:00</span><input id="seek" type="range" min="0" max="1000" value="0" disabled aria-label="拖曳目前音檔進度"><span id="duration">0:00</span></div>
-          <div class="transport"><button id="previous" type="button" class="button secondary">上一首</button><button id="play" type="button" class="button primary">開始播放</button><button id="next" type="button" class="button secondary">下一首</button><button id="previous-round" type="button" class="button secondary">上一遍</button><button id="next-round" type="button" class="button secondary">下一遍</button></div>
-          <button id="undo-jump" type="button" class="button undo-jump" disabled>↶ 返回剛才位置</button>
-          <div class="progress-line"><div id="progress-fill"></div></div><p id="queue-progress" class="muted small">清單尚未建立</p>
-        </section>
-        <section class="card" aria-labelledby="homework-title">
-          <div class="section-heading"><div><span class="eyebrow">每週作業</span><h2 id="homework-title">貼上老師的作業</h2></div></div>
-          <p class="muted">每行有 Track 範圍和遍數即可。建立後仍可在右側手動修改。</p>
-          <textarea id="homework" rows="6" placeholder="例如：(二) 聆聽CD：Track11-13（配合課本p.18-21）5遍"></textarea>
-          <div class="inline-actions"><button id="parse" type="button" class="button secondary">預覽作業</button><button id="example" type="button" class="text-button">填入範例</button></div>
-          <div id="preview" class="preview" hidden></div>
-          <button id="apply" type="button" class="button primary" hidden>使用這份清單</button>
-        </section>
-        <section class="card" aria-labelledby="files-title">
-          <div class="section-heading"><div><span class="eyebrow">音檔來源</span><h2 id="files-title">選擇自己可使用的音檔</h2></div></div>
-          <p class="muted">可一次選取多個 MP3、M4A 或 WAV。檔名包含 Track11 或 011 等曲目編號時，會自動配對。音檔只保存在這台裝置的瀏覽器。</p>
-          <label class="file-button">選取音檔<input id="files" type="file" accept="audio/*,.mp3,.m4a,.wav" multiple></label>
-          <div id="media-list" class="media-list"></div>
-        </section>
+    <section class="hero">
+      <h1>康軒英聽作業，一鍵照順序聽完</h1>
+      <p>音檔由<strong>康軒官方頁面</strong>播放，小幫手只幫你：整組 Track 播完算一遍、自動接下一首、算剩餘時間、跳錯可以返回。</p>
+    </section>
+
+    <section id="shared" class="card highlight" hidden>
+      <h2>📩 你收到一份作業清單</h2>
+      <p id="shared-summary"></p>
+      <p class="muted">按下方「開啟康軒」後，再點書籤「英聽小幫手」，清單會自動載入。</p>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">1</span>第一次使用：把「英聽小幫手」存成書籤</h2>
+      <p class="muted">每台手機或電腦只要做一次。</p>
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="iphone" type="button">iPhone / iPad</button>
+        <button class="tab" data-tab="android" type="button">Android</button>
+        <button class="tab" data-tab="pc" type="button">電腦</button>
       </div>
-      <aside class="card playlist-card" aria-labelledby="playlist-title">
-        <div class="section-heading"><div><span class="eyebrow">可自由編輯</span><h2 id="playlist-title">播放清單</h2></div><span id="item-count" class="count">0 首</span></div>
-        <p class="muted small">點任一曲目可跳回那一首；跳錯時按「返回剛才位置」可回到原本的秒數。「＋」會加在該首後面。</p>
-        <div id="playlist" class="playlist"></div>
-        <div class="manual-add"><label for="manual-track">手動新增曲目</label><div class="manual-row"><input id="manual-track" type="number" min="1" max="999" placeholder="Track 編號"><button id="manual-add" type="button" class="button secondary">加入最後</button></div></div>
-      </aside>
-    </div>
-    <p class="footnote">播放進度與清單只存在目前瀏覽器。分享連結會帶清單到另一台裝置，但不會同步音檔或已聽進度。手機瀏覽器可能要求按一次「開始播放」才能繼續自動播放。</p>
+      <div class="copy-box">
+        <button id="copy" class="button primary" type="button">📋 複製書籤碼</button>
+        <textarea id="code" readonly rows="3" aria-label="書籤碼"></textarea>
+      </div>
+      <ol class="steps" data-panel="iphone">
+        <li>先按上面「複製書籤碼」。</li>
+        <li>在 Safari 按下方「分享」鈕 →「加入書籤」→ 儲存（名稱改成「英聽小幫手」）。</li>
+        <li>打開書籤列表，找到「英聽小幫手」→ 按「編輯」。</li>
+        <li>把網址欄整段刪掉，貼上剛才複製的書籤碼 → 完成。</li>
+      </ol>
+      <ol class="steps" data-panel="android" hidden>
+        <li>先按上面「複製書籤碼」。</li>
+        <li>在 Chrome 按右上「⋮」→ 點「☆」把這頁加入書籤。</li>
+        <li>按「⋮」→「書籤」→ 找到剛存的書籤 → 按旁邊「⋮」→「編輯」。</li>
+        <li>名稱改成「英聽小幫手」，網址整段刪掉後貼上書籤碼 → 返回儲存。</li>
+        <li>之後使用方式：在康軒頁面點網址列，輸入「英聽小幫手」，點選下拉清單裡<strong>有星號的書籤</strong>。</li>
+      </ol>
+      <ol class="steps" data-panel="pc" hidden>
+        <li>按 Ctrl + Shift + B 顯示書籤列。</li>
+        <li>把下面這顆按鈕<strong>拖曳</strong>到書籤列上就完成了。</li>
+        <li class="drag-row"><a id="bookmarklet" class="bookmarklet" href="#">🎧 英聽小幫手</a></li>
+      </ol>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">2</span>打開康軒 CD 線上聽</h2>
+      <p class="muted">預設是 Cool ABC 3；其他冊別請掃自己課本上的 QR code 打開康軒頁面，一樣可以用。</p>
+      <a id="open" class="button primary big" href="https://listeningdata.knsh.com.tw/cd_online/V1/index.html?field=CA3" target="_blank" rel="noopener">▶ 開啟康軒 Cool ABC 3</a>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">3</span>在康軒頁面點書籤「英聽小幫手」</h2>
+      <ol class="steps">
+        <li>畫面會出現「英聽小幫手」面板（手機在下方，電腦在右上）。</li>
+        <li>第一次：展開「貼上本週作業」，把老師的作業文字整段貼上 → 按「建立清單」。</li>
+        <li>按「▶ 播放」，之後就會自動一首接一首、一遍接一遍播完。</li>
+        <li>清單和進度會記在這台裝置；下次打開康軒頁再點書籤，會從上次的位置接著聽。</li>
+        <li>想給老婆或其他家長同一份清單：面板裡按「🔗 分享這份清單」，把連結傳 LINE。</li>
+      </ol>
+    </section>
+
+    <p class="footnote">本工具不下載、不儲存、不轉傳任何康軒音檔；所有聲音都由康軒官方頁面播放。手機關掉螢幕時，部分瀏覽器可能會在一首結束後停住，回到畫面按「播放」即可接續。</p>
   </main>
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </body>
 </html>
