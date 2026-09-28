@@ -3,13 +3,13 @@ const audio = $('audio');
 const STORAGE_KEY = 'english-listening-player-v1';
 const MEDIA_DB = 'english-listening-media-v1';
 const EXAMPLE = '(二) 聆聽CD：Track11-13（配合課本p.18-21）5遍\n(三) 聆聽CD：Track14-16（配合課本p.22-24）5遍';
-let queue = [], currentIndex = 0, savedOffset = 0, media = new Map(), urls = new Map(), durations = new Map();
+let queue = [], currentIndex = 0, savedOffset = 0, media = new Map(), urls = new Map(), durations = new Map(), navigationHistory = [];
 let db = null, mediaObjectUrl = null, toastTimer = 0, lastSavedAt = 0, seeking = false;
 const makeId = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 const fmt = seconds => { const n = Math.max(0, Math.floor(seconds || 0)); return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, '0')}`; };
 const longFmt = seconds => { const n = Math.max(0, Math.ceil(seconds || 0)); const hours = Math.floor(n / 3600); return hours ? `${hours} 小時 ${Math.floor(n % 3600 / 60)} 分` : `${Math.floor(n / 60)} 分 ${n % 60} 秒`; };
 function toast(message, error = false) { const el = $('toast'); el.textContent = message; el.classList.toggle('error', error); el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 4200); }
-function saveState() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ queue, currentIndex, offset: audio.currentTime || savedOffset, text: $('homework').value, urls: Object.fromEntries(urls), durations: Object.fromEntries(durations) })); } catch { toast('瀏覽器無法儲存進度；請保留這個頁面。', true); } }
+function saveState() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ queue, currentIndex, offset: audio.currentTime || savedOffset, navigationHistory, text: $('homework').value, urls: Object.fromEntries(urls), durations: Object.fromEntries(durations) })); } catch { toast('瀏覽器無法儲存進度；請保留這個頁面。', true); } }
 function readState() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; } }
 function trackName(n) { return `Track ${n}`; }
 function sourceTrack(filename) { const match = filename.match(/(?:track|trk|t)[\s._-]*0*(\d{1,3})(?!\d)/i) || filename.match(/(?:^|[^\d])0*(\d{2,3})(?!\d)/); return match ? Number(match[1]) : null; }
@@ -43,27 +43,90 @@ async function setMedia(track, file) { media.set(track, { blob: file, name: file
 async function addFiles(files) { let added = 0, missing = []; for (const file of files) { const track = sourceTrack(file.name); if (!track) { missing.push(file.name); continue; } await setMedia(track, file); added++; } if (added) toast(`已配對 ${added} 個音檔。`); if (missing.length) toast(`${missing.length} 個檔名沒有 Track 編號；請在下方逐首選取。`, true); }
 function sourceFor(track) { const item = media.get(track); if (item) { if (mediaObjectUrl) URL.revokeObjectURL(mediaObjectUrl); mediaObjectUrl = URL.createObjectURL(item.blob); return mediaObjectUrl; } return urls.get(track) || null; }
 function loadCurrent() { const item = queue[currentIndex]; if (!item) return false; if (audio.dataset.entry === item.id && audio.src) return true; const src = sourceFor(item.track); if (!src) { audio.pause(); audio.removeAttribute('src'); audio.load(); audio.dataset.entry = ''; renderPlayer(); toast(`${trackName(item.track)} 尚未選擇音檔。`, true); return false; } audio.pause(); audio.src = src; audio.dataset.entry = item.id; audio.load(); if (savedOffset > 0) { const offset = savedOffset; audio.addEventListener('loadedmetadata', () => { if (audio.dataset.entry === item.id && offset < audio.duration) audio.currentTime = offset; }, { once: true }); savedOffset = 0; } return true; }
-async function playAt(index, start = true) { if (index < 0 || index >= queue.length) { audio.pause(); currentIndex = queue.length; renderAll(); saveState(); return; } const next = queue[index]; const changed = audio.dataset.entry !== next.id; currentIndex = index; if (changed) savedOffset = 0; if (!loadCurrent()) { renderAll(); saveState(); return; } renderAll(); saveState(); if (start) { try { await audio.play(); } catch { toast('請按「開始播放」繼續；瀏覽器暫時擋下自動播放。', true); renderPlayer(); } } }
+function rememberPosition() {
+  const item = currentEntry();
+  if (!item) return;
+  navigationHistory.push({ id: item.id, index: currentIndex, seconds: audio.currentTime || savedOffset || 0, wasPlaying: !audio.paused });
+  if (navigationHistory.length > 12) navigationHistory.shift();
+}
+async function playAt(index, start = true, remember = false, offset = 0) {
+  if (remember) rememberPosition();
+  if (index < 0 || index >= queue.length) { audio.pause(); currentIndex = queue.length; renderAll(); saveState(); return; }
+  const next = queue[index], sameEntry = audio.dataset.entry === next.id;
+  currentIndex = index;
+  if (!sameEntry) savedOffset = offset;
+  if (!loadCurrent()) { renderAll(); saveState(); return; }
+  if (sameEntry) { audio.currentTime = offset; savedOffset = 0; }
+  renderAll(); saveState();
+  if (start) { try { await audio.play(); } catch { toast('請按「開始播放」繼續；瀏覽器暫時擋下自動播放。', true); renderPlayer(); } }
+}
+function roundStart(index) {
+  if (!queue.length) return -1;
+  let start = Math.min(index, queue.length - 1);
+  const item = queue[start];
+  while (start > 0 && queue[start - 1].groupId === item.groupId && queue[start - 1].round === item.round) start--;
+  return start;
+}
+function previousRoundIndex() {
+  if (!queue.length) return -1;
+  if (currentIndex >= queue.length) return roundStart(queue.length - 1);
+  const start = roundStart(currentIndex);
+  return start > 0 ? roundStart(start - 1) : -1;
+}
+async function returnToPreviousPosition() {
+  while (navigationHistory.length) {
+    const position = navigationHistory.pop();
+    const index = queue.findIndex(item => item.id === position.id);
+    if (index < 0) continue;
+    await playAt(index, position.wasPlaying, false, position.seconds);
+    toast('已返回剛才的位置。');
+    return;
+  }
+  renderPlayer(); saveState(); toast('剛才的曲目已不在清單中。', true);
+}
 function currentEntry() { return queue[currentIndex] || null; }
 function remaining() { let seconds = 0, unknown = 0; for (let i = currentIndex; i < queue.length; i++) { const item = queue[i], length = durations.get(item.track) || (i === currentIndex ? audio.duration : 0); if (!Number.isFinite(length) || length <= 0) unknown++; else seconds += i === currentIndex ? Math.max(0, length - (audio.currentTime || savedOffset)) : length; } $('remaining').textContent = unknown ? (seconds ? `${longFmt(seconds)}＋` : '--:--') : longFmt(seconds); $('remaining-note').textContent = unknown ? `另有 ${unknown} 首音檔時間待確認` : '依音檔長度計算；暫停時間不計入'; }
-function renderPlayer() { const item = currentEntry(), completed = queue.length && currentIndex >= queue.length; $('now-title').textContent = item ? trackName(item.track) : completed ? '全部聽完了' : '準備開始'; $('now-detail').textContent = item ? `${item.label}・第 ${item.round} / ${item.total} 遍` : completed ? '可以重新播放，或貼入下一週作業。' : '先建立清單，再選擇音檔。'; $('play-state').textContent = !item ? completed ? '已完成' : '尚未播放' : audio.paused ? '已暫停' : '播放中'; $('play').textContent = !item && completed ? '重新播放' : audio.paused ? '開始播放' : '暫停'; $('play').disabled = !queue.length; $('previous').disabled = !item || currentIndex === 0; $('next').disabled = !item; $('next-round').disabled = !item; const position = audio.currentTime || savedOffset, length = Number.isFinite(audio.duration) ? audio.duration : durations.get(item?.track) || 0; $('elapsed').textContent = fmt(position); $('duration').textContent = fmt(length); $('seek').disabled = !item || !length; if (!seeking) $('seek').value = length ? Math.round(position / length * 1000) : 0; $('queue-progress').textContent = queue.length ? `${Math.min(currentIndex + 1, queue.length)} / ${queue.length} 首` : '清單尚未建立'; $('progress-fill').style.width = queue.length ? `${Math.min(100, (currentIndex + (length ? position / length : 0)) / queue.length * 100)}%` : '0%'; remaining(); }
-function renderPlaylist() { const root = $('playlist'); root.replaceChildren(); $('item-count').textContent = `${queue.length} 首`; if (!queue.length) { const empty = document.createElement('div'); empty.className = 'playlist-empty'; empty.textContent = '清單是空的。貼上作業或手動新增第一首。'; root.append(empty); return; } let lastKey = ''; for (let i = 0; i < queue.length; i++) { const item = queue[i], key = `${item.groupId}|${item.round}`; if (key !== lastKey) { const heading = document.createElement('div'); heading.className = 'queue-group'; heading.textContent = `${item.label} · 第 ${item.round} / ${item.total} 遍`; root.append(heading); lastKey = key; } const row = document.createElement('div'); row.className = `queue-row${i === currentIndex ? ' current' : ''}${i < currentIndex ? ' done' : ''}`; const play = document.createElement('button'); play.className = 'queue-play'; play.type = 'button'; const title = document.createElement('strong'), detail = document.createElement('small'); title.textContent = trackName(item.track); detail.textContent = i === currentIndex ? '目前位置 · 點擊可重播' : media.has(item.track) || urls.has(item.track) ? '音檔已就緒' : '待選音檔'; play.append(title, detail); play.onclick = () => playAt(i); const actions = document.createElement('div'); actions.className = 'queue-actions'; for (const [symbol, description, click] of [['＋', '在後面新增曲目', () => insertAfter(i)], ['↑', '往上移', () => moveItem(i, -1)], ['↓', '往下移', () => moveItem(i, 1)], ['×', '移除曲目', () => removeItem(i)]]) { const button = document.createElement('button'); button.type = 'button'; button.textContent = symbol; button.title = description; button.setAttribute('aria-label', `${description}：${trackName(item.track)}`); button.onclick = click; actions.append(button); } row.append(play, actions); root.append(row); } }
+function renderPlayer() {
+  const item = currentEntry(), completed = queue.length && currentIndex >= queue.length;
+  $('now-title').textContent = item ? trackName(item.track) : completed ? '全部聽完了' : '準備開始';
+  $('now-detail').textContent = item ? `${item.label}・第 ${item.round} / ${item.total} 遍` : completed ? '可以重新播放，或貼入下一週作業。' : '先建立清單，再選擇音檔。';
+  $('play-state').textContent = !item ? completed ? '已完成' : '尚未播放' : audio.paused ? '已暫停' : '播放中';
+  $('play').textContent = completed ? '重新播放' : audio.paused ? '開始播放' : '暫停';
+  $('play').disabled = !queue.length;
+  $('previous').disabled = !queue.length || currentIndex === 0;
+  $('next').disabled = !item;
+  $('previous-round').disabled = previousRoundIndex() < 0;
+  $('next-round').disabled = !item;
+  $('undo-jump').disabled = !navigationHistory.length;
+  const position = item ? audio.currentTime || savedOffset : 0;
+  const length = item ? Number.isFinite(audio.duration) ? audio.duration : durations.get(item.track) || 0 : 0;
+  $('elapsed').textContent = fmt(position); $('duration').textContent = fmt(length);
+  $('seek').disabled = !item || !length;
+  if (!seeking) $('seek').value = length ? Math.round(position / length * 1000) : 0;
+  $('queue-progress').textContent = queue.length ? `${Math.min(currentIndex + 1, queue.length)} / ${queue.length} 首` : '清單尚未建立';
+  $('progress-fill').style.width = queue.length ? `${Math.min(100, (currentIndex + (length ? position / length : 0)) / queue.length * 100)}%` : '0%';
+  remaining();
+}
+function renderPlaylist() { const root = $('playlist'); root.replaceChildren(); $('item-count').textContent = `${queue.length} 首`; if (!queue.length) { const empty = document.createElement('div'); empty.className = 'playlist-empty'; empty.textContent = '清單是空的。貼上作業或手動新增第一首。'; root.append(empty); return; } let lastKey = ''; for (let i = 0; i < queue.length; i++) { const item = queue[i], key = `${item.groupId}|${item.round}`; if (key !== lastKey) { const heading = document.createElement('div'); heading.className = 'queue-group'; heading.textContent = `${item.label} · 第 ${item.round} / ${item.total} 遍`; root.append(heading); lastKey = key; } const row = document.createElement('div'); row.className = `queue-row${i === currentIndex ? ' current' : ''}${i < currentIndex ? ' done' : ''}`; const play = document.createElement('button'); play.className = 'queue-play'; play.type = 'button'; const title = document.createElement('strong'), detail = document.createElement('small'); title.textContent = trackName(item.track); detail.textContent = i === currentIndex ? '目前位置 · 點擊可重播' : media.has(item.track) || urls.has(item.track) ? '音檔已就緒' : '待選音檔'; play.append(title, detail); play.onclick = () => playAt(i, true, true); const actions = document.createElement('div'); actions.className = 'queue-actions'; for (const [symbol, description, click] of [['＋', '在後面新增曲目', () => insertAfter(i)], ['↑', '往上移', () => moveItem(i, -1)], ['↓', '往下移', () => moveItem(i, 1)], ['×', '移除曲目', () => removeItem(i)]]) { const button = document.createElement('button'); button.type = 'button'; button.textContent = symbol; button.title = description; button.setAttribute('aria-label', `${description}：${trackName(item.track)}`); button.onclick = click; actions.append(button); } row.append(play, actions); root.append(row); } }
 function renderMedia() { const root = $('media-list'); root.replaceChildren(); const tracks = [...new Set(queue.map(item => item.track))].sort((a, b) => a - b); if (!tracks.length) { root.textContent = '建立清單後，這裡會列出需要配對的曲目。'; root.className = 'media-list muted small'; return; } root.className = 'media-list'; for (const track of tracks) { const row = document.createElement('div'); row.className = 'media-row'; const name = document.createElement('strong'); name.textContent = trackName(track); const source = document.createElement('span'); source.className = 'media-name'; source.textContent = media.get(track)?.name || urls.get(track) || '尚未選擇音檔'; const label = document.createElement('label'); label.textContent = media.has(track) ? '更換' : '選這首的音檔'; const input = document.createElement('input'); input.type = 'file'; input.accept = 'audio/*,.mp3,.m4a,.wav'; input.onchange = async () => { if (input.files?.[0]) { await setMedia(track, input.files[0]); toast(`${trackName(track)} 已配對。`); } }; label.append(input); row.append(name, source, label); const edit = document.createElement('div'); edit.className = 'source-edit'; const urlInput = document.createElement('input'); urlInput.type = 'url'; urlInput.placeholder = '或貼上有權使用的音檔網址'; urlInput.value = urls.get(track) || ''; urlInput.setAttribute('aria-label', `${trackName(track)} 音檔網址`); const urlButton = document.createElement('button'); urlButton.type = 'button'; urlButton.className = 'button secondary'; urlButton.textContent = '儲存'; urlButton.onclick = () => { const value = urlInput.value.trim(); if (value && !/^https:\/\//i.test(value)) return toast('請使用 https 音檔網址。', true); if (value) { urls.set(track, value); media.delete(track); durations.delete(track); dbDelete(track).catch(() => toast('音檔來源已更換，但本機舊檔尚未清除。', true)); } else urls.delete(track); saveState(); renderMedia(); renderPlayer(); toast('音檔網址已更新；下次選取這首時生效。'); }; edit.append(urlInput, urlButton); row.append(edit); root.append(row); } }
 function renderAll() { renderPlayer(); renderPlaylist(); renderMedia(); }
 function insertAfter(index) { const raw = prompt('要新增哪一首？請輸入 Track 編號：'); if (raw === null) return; const track = Number(raw); if (!Number.isInteger(track) || track < 1 || track > 999) return toast('請輸入 1 到 999 的 Track 編號。', true); const anchor = queue[index]; queue.splice(index + 1, 0, { id: makeId(), groupId: anchor.groupId, label: anchor.label, track, round: anchor.round, total: anchor.total }); saveState(); renderAll(); }
 function addLast() { const track = Number($('manual-track').value); if (!Number.isInteger(track) || track < 1 || track > 999) return toast('請輸入 1 到 999 的 Track 編號。', true); queue.push({ id: makeId(), groupId: makeId(), label: '手動新增', track, round: 1, total: 1 }); $('manual-track').value = ''; saveState(); renderAll(); }
 function removeItem(index) { const wasCurrent = index === currentIndex, wasPlaying = !audio.paused; queue.splice(index, 1); if (index < currentIndex) currentIndex--; if (wasCurrent) { audio.pause(); audio.removeAttribute('src'); audio.load(); audio.dataset.entry = ''; savedOffset = 0; if (currentIndex >= queue.length && queue.length) currentIndex = queue.length; if (wasPlaying && queue[currentIndex]) playAt(currentIndex); } if (!queue.length) currentIndex = 0; saveState(); renderAll(); }
 function moveItem(index, offset) { const target = index + offset; if (target < 0 || target >= queue.length) return; const playingId = currentEntry()?.id; const [item] = queue.splice(index, 1); queue.splice(target, 0, item); if (playingId) currentIndex = queue.findIndex(row => row.id === playingId); saveState(); renderAll(); }
-function nextRound() { const item = currentEntry(); if (!item) return; let index = currentIndex + 1; while (index < queue.length && queue[index].groupId === item.groupId && queue[index].round === item.round) index++; playAt(index); }
+function nextRound() { const item = currentEntry(); if (!item) return; let index = currentIndex + 1; while (index < queue.length && queue[index].groupId === item.groupId && queue[index].round === item.round) index++; playAt(index, true, true); }
+function previousRound() { const index = previousRoundIndex(); if (index >= 0) playAt(index, true, true); }
 function showPreview() { const result = parseHomework($('homework').value), preview = $('preview'); preview.replaceChildren(); preview.hidden = false; $('apply').hidden = !result.groups.length; if (result.groups.length) { const summary = document.createElement('strong'); summary.textContent = `找到 ${result.groups.length} 組、${expand(result.groups).length} 首：`; preview.append(summary); for (const g of result.groups) { const line = document.createElement('div'); line.textContent = `${g.label}：Track ${g.first}${g.last > g.first ? `–${g.last}` : ''}，${g.times} 遍`; preview.append(line); } } else preview.textContent = '沒有找到可播放的作業。每行請包含 Track 範圍與「幾遍」。'; if (result.skipped.length) { const warning = document.createElement('div'); warning.className = 'error'; warning.textContent = `${result.skipped.length} 行未辨識，套用前請檢查。`; preview.append(warning); } return result; }
-function applyHomework() { const result = showPreview(); if (!result.groups.length) return; audio.pause(); audio.removeAttribute('src'); audio.load(); audio.dataset.entry = ''; queue = expand(result.groups); currentIndex = 0; savedOffset = 0; saveState(); renderAll(); toast('新清單已建立。選好音檔後按「開始播放」。'); }
+function applyHomework() { const result = showPreview(); if (!result.groups.length) return; audio.pause(); audio.removeAttribute('src'); audio.load(); audio.dataset.entry = ''; queue = expand(result.groups); currentIndex = 0; savedOffset = 0; navigationHistory = []; saveState(); renderAll(); toast('新清單已建立。選好音檔後按「開始播放」。'); }
 async function share() { if (!queue.length) return toast('先建立清單，才能分享。', true); const link = `${location.origin}${location.pathname}#p=${encodeShare(shareData())}`; try { await navigator.clipboard.writeText(link); toast('清單連結已複製。接收者需自行選取有權使用的音檔。'); } catch { prompt('請複製這個清單連結：', link); } }
 function readShareHash() { const match = location.hash.match(/^#p=([A-Za-z0-9_-]+)$/); if (!match) return null; try { return decodeShare(match[1]); } catch { toast('分享連結無法讀取。', true); return null; } }
-async function init() { const state = readState(), shared = readShareHash(); queue = shared || (Array.isArray(state.queue) ? state.queue : []); currentIndex = shared ? 0 : Math.min(Math.max(Number(state.currentIndex) || 0, 0), queue.length); savedOffset = shared ? 0 : Number(state.offset) || 0; $('homework').value = shared ? '' : state.text || ''; urls = new Map(Object.entries(state.urls || {}).map(([key, value]) => [Number(key), value])); durations = new Map(Object.entries(state.durations || {}).map(([key, value]) => [Number(key), Number(value)])); if (shared) { saveState(); toast('已載入分享的清單；請選取這台裝置可使用的音檔。'); } try { db = await openDB(); for (const [track, item] of await dbAll()) if (item?.blob) media.set(track, item); } catch { toast('這個瀏覽器無法保存音檔；本次仍可選檔播放。', true); } renderAll(); }
+async function init() { const state = readState(), shared = readShareHash(); queue = shared || (Array.isArray(state.queue) ? state.queue : []); currentIndex = shared ? 0 : Math.min(Math.max(Number(state.currentIndex) || 0, 0), queue.length); savedOffset = shared ? 0 : Number(state.offset) || 0; navigationHistory = shared ? [] : Array.isArray(state.navigationHistory) ? state.navigationHistory.slice(-12) : []; $('homework').value = shared ? '' : state.text || ''; urls = new Map(Object.entries(state.urls || {}).map(([key, value]) => [Number(key), value])); durations = new Map(Object.entries(state.durations || {}).map(([key, value]) => [Number(key), Number(value)])); if (shared) { saveState(); toast('已載入分享的清單；請選取這台裝置可使用的音檔。'); } try { db = await openDB(); for (const [track, item] of await dbAll()) if (item?.blob) media.set(track, item); } catch { toast('這個瀏覽器無法保存音檔；本次仍可選檔播放。', true); } renderAll(); }
 $('play').onclick = async () => { if (!queue.length) return; if (currentIndex >= queue.length) return playAt(0); if (!loadCurrent()) return; if (audio.paused) { try { await audio.play(); } catch { toast('音檔無法播放。請檢查來源或重新選檔。', true); } } else audio.pause(); renderPlayer(); };
-$('previous').onclick = () => playAt(Math.max(0, currentIndex - 1));
-$('next').onclick = () => playAt(currentIndex + 1);
+$('previous').onclick = () => playAt(Math.max(0, currentIndex - 1), true, true);
+$('next').onclick = () => playAt(currentIndex + 1, true, true);
+$('previous-round').onclick = previousRound;
 $('next-round').onclick = nextRound;
+$('undo-jump').onclick = returnToPreviousPosition;
 $('parse').onclick = showPreview;
 $('apply').onclick = applyHomework;
 $('example').onclick = () => { $('homework').value = EXAMPLE; showPreview(); };

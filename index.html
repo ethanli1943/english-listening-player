@@ -29,7 +29,8 @@
           <div class="time-card"><span>整份清單剩餘時間</span><strong id="remaining">--:--</strong><small id="remaining-note">加入音檔後會顯示時間</small></div>
           <audio id="audio" preload="metadata" playsinline></audio>
           <div class="seek-row"><span id="elapsed">0:00</span><input id="seek" type="range" min="0" max="1000" value="0" disabled aria-label="拖曳目前音檔進度"><span id="duration">0:00</span></div>
-          <div class="transport"><button id="previous" type="button" class="button icon" aria-label="上一首">⏮</button><button id="play" type="button" class="button primary">開始播放</button><button id="next" type="button" class="button icon" aria-label="下一首">⏭</button><button id="next-round" type="button" class="button secondary">下一遍</button></div>
+          <div class="transport"><button id="previous" type="button" class="button secondary">上一首</button><button id="play" type="button" class="button primary">開始播放</button><button id="next" type="button" class="button secondary">下一首</button><button id="previous-round" type="button" class="button secondary">上一遍</button><button id="next-round" type="button" class="button secondary">下一遍</button></div>
+          <button id="undo-jump" type="button" class="button undo-jump" disabled>↶ 返回剛才位置</button>
           <div class="progress-line"><div id="progress-fill"></div></div><p id="queue-progress" class="muted small">清單尚未建立</p>
         </section>
         <section class="card" aria-labelledby="homework-title">
@@ -49,7 +50,7 @@
       </div>
       <aside class="card playlist-card" aria-labelledby="playlist-title">
         <div class="section-heading"><div><span class="eyebrow">可自由編輯</span><h2 id="playlist-title">播放清單</h2></div><span id="item-count" class="count">0 首</span></div>
-        <p class="muted small">點曲目可跳到該首；「＋」會加在該首後面。編輯其他曲目時，目前播放不會中斷。</p>
+        <p class="muted small">點任一曲目可跳回那一首；跳錯時按「返回剛才位置」可回到原本的秒數。「＋」會加在該首後面。</p>
         <div id="playlist" class="playlist"></div>
         <div class="manual-add"><label for="manual-track">手動新增曲目</label><div class="manual-row"><input id="manual-track" type="number" min="1" max="999" placeholder="Track 編號"><button id="manual-add" type="button" class="button secondary">加入最後</button></div></div>
       </aside>
